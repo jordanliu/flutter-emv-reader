@@ -15,7 +15,7 @@ Add dependency in `pubsec.yaml`,
 dependencies:
     emv_card_reader:
         git:
-            url: git://github.com/paytrek/emv-card-reader.git
+           url: git@github.com:WiPayDevelopment/flutter-emv-reader.git
 ```
 
 ### Usage
