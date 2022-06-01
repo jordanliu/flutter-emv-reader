@@ -54,4 +54,4 @@ Close NFC reader,
 emv.stop();
 ```
 
-Please check [example Flutter app](https://github.com/paytrek/emv-card-reader/blob/master/example/lib/main.dart).
+Please check [example Flutter app](https://github.com/WiPayDevelopment/flutter-emv-reader/blob/master/example/lib/main.dart).
