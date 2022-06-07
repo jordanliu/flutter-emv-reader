@@ -2,6 +2,8 @@
 
 This plugin reads payment related cards by using NFC technology. Tested with VISA and Master Card. The plugin will return card number, expire date (MM/YY), holder name and card status (unknown, active, locked).
 
+Fork of https://github.com/paytrek/emv-card-reader
+
 ##### Please note
 
 Only Android is supported. Apple CoreNFC does not support payment related cards, only Apple Pay can use NFC to extract card detail.
@@ -13,9 +15,9 @@ Add dependency in `pubsec.yaml`,
 
 ```yaml
 dependencies:
-    emv_card_reader:
-        git:
-           url: git@github.com:WiPayDevelopment/flutter-emv-reader.git
+  emv_card_reader:
+    git:
+      url: git@github.com:jordanliu/flutter-emv-reader.git
 ```
 
 ### Usage
@@ -53,5 +55,3 @@ Close NFC reader,
 ```dart
 emv.stop();
 ```
-
-Please check [example Flutter app](https://github.com/WiPayDevelopment/flutter-emv-reader/blob/master/example/lib/main.dart).
