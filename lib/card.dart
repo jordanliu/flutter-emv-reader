@@ -12,5 +12,13 @@ class EmvCard {
 
   final String? status;
 
-  const EmvCard({this.number, this.expire, this.holder, this.type, this.status});
+  final String? track2;
+
+  const EmvCard(
+      {this.number,
+      this.expire,
+      this.holder,
+      this.type,
+      this.status,
+      this.track2});
 }
