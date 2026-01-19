@@ -32,49 +32,62 @@ class NfcScanner(private val plugin: EmvCardReaderPlugin) : NfcAdapter.ReaderCal
 
         val parser = EmvTemplate.Builder().setProvider(provider).setConfig(config).build()
 
-        val card = parser.readEmvCard()
+        try {
+            val card = parser.readEmvCard()
 
-        var number: String? = null
-        var expire: String? = null
-        var holder: String? = null
-        var type: String? = null
-        var status: String? = null
+            var number: String? = null
+            var expire: String? = null
+            var holder: String? = null
+            var type: String? = null
+            var status: String? = null
 
-        val fmt = SimpleDateFormat("MM/YY")
+            val fmt = SimpleDateFormat("MM/YY")
 
-        if (card.track1 != null) {
-            number = card.track1.cardNumber
-            expire = fmt.format(card.track1.expireDate)
-        } else if (card.track2 != null) {
-            number = card.track2.cardNumber
-            expire = fmt.format(card.track2.expireDate)
+            if (card.track1 != null) {
+                number = card.track1.cardNumber
+                expire = fmt.format(card.track1.expireDate)
+            } else if (card.track2 != null) {
+                number = card.track2.cardNumber
+                expire = fmt.format(card.track2.expireDate)
+            }
+
+            if (card.holderFirstname != null && card.holderLastname != null) {
+                holder = card.holderFirstname + " " + card.holderLastname
+            }
+
+            if (card.type != null) {
+                type = card.type.name
+            }
+
+            if (card.state == CardStateEnum.UNKNOWN) {
+                status = "unknown"
+            } else if (card.state == CardStateEnum.LOCKED) {
+                status = "locked"
+            } else if (card.state == CardStateEnum.ACTIVE) {
+                status = "active"
+            }
+
+            val res = HashMap<String, String?>()
+            res.put("type", type)
+            res.put("number", number)
+            res.put("expire", expire)
+            res.put("holder", holder)
+            res.put("status", status)
+
+            handler.post{ sink.success(res) }
+        } catch (e: SecurityException) {
+            // Tag became stale (card was removed before transaction completed)
+            handler.post{ sink.success(null) }
+        } catch (e: Exception) {
+            // Handle any other unexpected errors during card reading
+            e.printStackTrace()
+            handler.post{ sink.success(null) }
+        } finally {
+            try {
+                id.close()
+            } catch (e: IOException) {
+                // Ignore close errors
+            }
         }
-
-        if (card.holderFirstname != null && card.holderLastname != null) {
-            holder = card.holderFirstname + " " + card.holderLastname
-        }
-
-        if (card.type != null) {
-            type = card.type.name
-        }
-
-        if (card.state == CardStateEnum.UNKNOWN) {
-            status = "unknown"
-        } else if (card.state == CardStateEnum.LOCKED) {
-            status = "locked"
-        } else if (card.state == CardStateEnum.ACTIVE) {
-            status = "active"
-        }
-
-        val res = HashMap<String, String?>()
-        res.put("type", type)
-        res.put("number", number)
-        res.put("expire", expire)
-        res.put("holder", holder)
-        res.put("status", status)
-
-        handler.post{ sink.success(res) }
-
-        id.close()
     }
 }

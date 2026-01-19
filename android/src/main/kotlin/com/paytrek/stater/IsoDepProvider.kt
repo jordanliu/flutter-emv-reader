@@ -14,6 +14,10 @@ class IsoDepProvider(val tag: IsoDep): IProvider {
             Log.d("ERROR", "Tag was lost")
             
             return byteArrayOf()
+        } catch(e: SecurityException) {
+            Log.d("ERROR", "Tag is out of date - card was removed before transaction completed")
+            
+            return byteArrayOf()
         } catch(e: IOException) {
             e.printStackTrace()
 
