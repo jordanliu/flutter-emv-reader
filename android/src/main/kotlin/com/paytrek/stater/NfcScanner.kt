@@ -87,6 +87,8 @@ class NfcScanner(private val plugin: EmvCardReaderPlugin) : NfcAdapter.ReaderCal
                 id.close()
             } catch (e: IOException) {
                 // Ignore close errors
+            } catch (e: SecurityException) {
+                // Ignore - tag was already stale
             }
         }
     }
