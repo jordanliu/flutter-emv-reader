@@ -16,79 +16,96 @@ class NfcScanner(private val plugin: EmvCardReaderPlugin) : NfcAdapter.ReaderCal
     override fun onTagDiscovered(tag: Tag) {
         val sink = plugin.sink ?: return
 
-        var id: IsoDep
+        var success = false
 
-        try {
-            id = IsoDep.get(tag)
-            id.connect()
-        } catch (e: IOException) {
-            handler.post{ sink.success(null) }
-
-            return
-        }
-
-        val provider = IsoDepProvider(id)
-        val config = EmvTemplate.Config()
-
-        val parser = EmvTemplate.Builder().setProvider(provider).setConfig(config).build()
-
-        try {
-            val card = parser.readEmvCard()
-
-            var number: String? = null
-            var expire: String? = null
-            var holder: String? = null
-            var type: String? = null
-            var status: String? = null
-
-            val fmt = SimpleDateFormat("MM/YY")
-
-            if (card.track1 != null) {
-                number = card.track1.cardNumber
-                expire = fmt.format(card.track1.expireDate)
-            } else if (card.track2 != null) {
-                number = card.track2.cardNumber
-                expire = fmt.format(card.track2.expireDate)
-            }
-
-            if (card.holderFirstname != null && card.holderLastname != null) {
-                holder = card.holderFirstname + " " + card.holderLastname
-            }
-
-            if (card.type != null) {
-                type = card.type.name
-            }
-
-            if (card.state == CardStateEnum.UNKNOWN) {
-                status = "unknown"
-            } else if (card.state == CardStateEnum.LOCKED) {
-                status = "locked"
-            } else if (card.state == CardStateEnum.ACTIVE) {
-                status = "active"
-            }
-
-            val res = HashMap<String, String?>()
-            res.put("type", type)
-            res.put("number", number)
-            res.put("expire", expire)
-            res.put("holder", holder)
-            res.put("status", status)
-
-            handler.post{ sink.success(res) }
-        } catch (e: SecurityException) {
-            // Tag became stale (card was removed before transaction completed)
-            handler.post{ sink.success(null) }
-        } catch (e: Exception) {
-            // Handle any other unexpected errors during card reading
-            e.printStackTrace()
-            handler.post{ sink.success(null) }
-        } finally {
+        while (true) {
+            var id: IsoDep? = null
             try {
-                id.close()
-            } catch (e: IOException) {
-                // Ignore close errors
-            } catch (e: SecurityException) {
-                // Ignore - tag was already stale
+                id = IsoDep.get(tag)
+                if (id == null) {
+                     // If we can't get IsoDep, it's likely fatal or not an IsoDep tag
+                     handler.post{ sink.success(null) }
+                     return
+                }
+                
+                // Attempt to connect
+                if (!id.isConnected) {
+                    id.connect()
+                }
+                
+                // Increase timeout to 2 seconds to handle slow cards/complex transactions
+                id.timeout = 2000
+
+                val provider = IsoDepProvider(id)
+                val config = EmvTemplate.Config()
+                val parser = EmvTemplate.Builder().setProvider(provider).setConfig(config).build()
+                val card = parser.readEmvCard()
+
+                var number: String? = null
+                var expire: String? = null
+                var holder: String? = null
+                var type: String? = null
+                var status: String? = null
+
+                val fmt = SimpleDateFormat("MM/YY")
+
+                if (card.track1 != null) {
+                    number = card.track1.cardNumber
+                    expire = fmt.format(card.track1.expireDate)
+                } else if (card.track2 != null) {
+                    number = card.track2.cardNumber
+                    expire = fmt.format(card.track2.expireDate)
+                }
+
+                if (card.holderFirstname != null && card.holderLastname != null) {
+                    holder = card.holderFirstname + " " + card.holderLastname
+                }
+
+                if (card.type != null) {
+                    type = card.type.name
+                }
+
+                if (card.state == CardStateEnum.UNKNOWN) {
+                    status = "unknown"
+                } else if (card.state == CardStateEnum.LOCKED) {
+                    status = "locked"
+                } else if (card.state == CardStateEnum.ACTIVE) {
+                    status = "active"
+                }
+
+                val res = HashMap<String, String?>()
+                res.put("type", type)
+                res.put("number", number)
+                res.put("expire", expire)
+                res.put("holder", holder)
+                res.put("status", status)
+
+                if (number == null) {
+                    // unexpected empty read, retry
+                    try { id.close() } catch (ignored: Exception) {}
+                     try { Thread.sleep(100) } catch (ignored: Exception) {}
+                    continue
+                }
+
+                handler.post{ sink.success(res) }
+                success = true
+                try { id.close() } catch (ignored: Exception) {}
+                break
+
+            } catch (e: Exception) {
+                // If tag is lost, we must break the loop to allow the system to rediscover the tag (or a new one).
+                // Looping on a lost tag will block the NFC service forever.
+                if (e is android.nfc.TagLostException || e.cause is android.nfc.TagLostException) {
+                    break
+                }
+                
+                // Slight delay before retry for other errors (e.g. transmission noise)
+                try { Thread.sleep(100) } catch (ignored: Exception) {}
+                try { id?.close() } catch (ignored: Exception) {}
+            } finally {
+                if (success) {
+                     try { id?.close() } catch (ignored: Exception) {}
+                }
             }
         }
     }

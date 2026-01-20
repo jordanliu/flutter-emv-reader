@@ -11,12 +11,19 @@ class MyApp extends StatefulWidget {
   _MyAppState createState() => _MyAppState();
 }
 
+class ScannedCard {
+  final EmvCard card;
+  final DateTime timestamp;
+
+  ScannedCard(this.card, this.timestamp);
+}
+
 class _MyAppState extends State<MyApp> {
   // Card reader instance
   final _emv = EmvCardReader();
 
-  // Card data
-  EmvCard? _card;
+  // Card list
+  final List<ScannedCard> _cards = [];
 
   @override
   void initState() {
@@ -29,10 +36,27 @@ class _MyAppState extends State<MyApp> {
       }
 
       // Stream NFC tags
-      _emv.stream().listen((card) => setState(() => _card = card));
+      _emv.stream().listen((card) {
+        if (card != null) {
+          final now = DateTime.now();
+          // Debounce: Check if the same card was scanned recently (e.g., < 1.5 seconds)
+          if (_cards.isNotEmpty) {
+            final lastCard = _cards.first;
+            final isSameNumber = lastCard.card.number == card.number;
+            final isRecent =
+                now.difference(lastCard.timestamp).inMilliseconds < 1500;
 
-      // OR read once by using,
-      // _emv.read().then((value) => print(value));
+            if (isSameNumber && isRecent) {
+              return;
+            }
+          }
+
+          setState(() {
+            // Add new card to the top of the list
+            _cards.insert(0, ScannedCard(card, now));
+          });
+        }
+      });
     };
 
     final sc = (_) {
@@ -54,25 +78,53 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    var result;
-    if (_card == null) {
-      result = Text('Waiting');
-    } else {
-      final number = _card!.number;
-      final type = _card!.type;
-      final holder = _card!.holder;
-      final expire = _card!.expire;
-      final status = _card!.status;
-
-      result = Text('$number - $type - $holder - $expire - $status');
-    }
-
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Plugin example app'),
+          title: const Text('flutter-emv-reader'),
+          actions: [
+            IconButton(
+              icon: Icon(Icons.delete),
+              onPressed: () => setState(() => _cards.clear()),
+            )
+          ],
         ),
-        body: Center(child: result),
+        body: _cards.isEmpty
+            ? Center(child: Text('Waiting for card...'))
+            : ListView.builder(
+                itemCount: _cards.length,
+                itemBuilder: (context, index) {
+                  final scannedCard = _cards[index];
+                  final card = scannedCard.card;
+                  final number = card.number;
+                  final type = card.type;
+                  final holder = card.holder;
+                  final expire = card.expire;
+                  final status = card.status;
+
+                  // Calculate the sequential ID (Newest = highest number)
+                  final id = _cards.length - index;
+
+                  return ListTile(
+                    leading: CircleAvatar(
+                      child: Text('$id'),
+                    ),
+                    title: Text(number ?? 'Unknown Number'),
+                    subtitle: Text('$type - $holder - $expire'),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(status ?? 'Unknown'),
+                        Text(
+                          '${scannedCard.timestamp.hour}:${scannedCard.timestamp.minute}:${scannedCard.timestamp.second}',
+                          style: TextStyle(fontSize: 10, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }

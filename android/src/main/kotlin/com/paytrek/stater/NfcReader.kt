@@ -21,67 +21,97 @@ class NfcReader(result: MethodChannel.Result, call: MethodCall) : AbstractNfcHan
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onTagDiscovered(tag: Tag) {
-        var id: IsoDep
+        var success = false
 
-        try {
-            id = IsoDep.get(tag)
-            id.connect()
-        } catch (e: IOException) {
-            handler.post{ result.success(null) }
+        while (true) {
+            var id: IsoDep? = null
+            try {
+                id = IsoDep.get(tag)
+                
+                if (id == null) {
+                     // If we fail to get IsoDep, break and return null as it's likely a fatal type mismatch
+                     handler.post{ result.success(null) }
+                     unregister()
+                     return
+                }
 
-            unregister()
+                if (!id.isConnected) {
+                    id.connect()
+                }
 
-            return
+                // Increase timeout to 2 seconds to handle slow cards/complex transactions
+                id.timeout = 2000
+
+                val provider = IsoDepProvider(id)
+                val config = EmvTemplate.Config()
+                val parser = EmvTemplate.Builder().setProvider(provider).setConfig(config).build()
+                val card = parser.readEmvCard()
+
+                var number: String? = null
+                var expire: String? = null
+                var holder: String? = null
+                var type: String? = null
+                var status: String? = null
+
+                val fmt = SimpleDateFormat("MM/YY")
+
+                if (card.track1 != null) {
+                    number = card.track1.cardNumber
+                    expire = fmt.format(card.track1.expireDate)
+                } else if (card.track2 != null) {
+                    number = card.track2.cardNumber
+                    expire = fmt.format(card.track2.expireDate)
+                }
+
+                if (card.holderFirstname != null && card.holderLastname != null) {
+                    holder = card.holderFirstname + " " + card.holderLastname
+                }
+
+                if (card.type != null) {
+                    type = card.type.name
+                }
+
+                if (card.state == CardStateEnum.UNKNOWN) {
+                    status = "unknown"
+                } else if (card.state == CardStateEnum.LOCKED) {
+                    status = "locked"
+                } else if (card.state == CardStateEnum.ACTIVE) {
+                    status = "active"
+                }
+
+                val res = HashMap<String, String?>()
+                res.put("type", type)
+                res.put("number", number)
+                res.put("expire", expire)
+                res.put("holder", holder)
+                res.put("status", status)
+
+                if (number == null) {
+                    try { id.close() } catch (ignored: Exception) {}
+                    try { Thread.sleep(100) } catch (ignored: Exception) {}
+                    continue
+                }
+
+                handler.post{ result.success(res) }
+                success = true
+                unregister()
+                try { id.close() } catch (ignored: Exception) {}
+                break
+
+            } catch (e: Exception) {
+               // If tag is lost, break to allow rediscovery.
+               if (e is android.nfc.TagLostException || e.cause is android.nfc.TagLostException) {
+                   break
+               }
+
+               // Slight delay before retry
+               try { Thread.sleep(100) } catch (ignored: Exception) {}
+               try { id?.close() } catch (ignored: Exception) {}
+            } finally {
+                if (success) {
+                    try { id?.close() } catch (ignored: Exception) {}
+                }
+            }
         }
-
-        val provider = IsoDepProvider(id)
-        val config = EmvTemplate.Config()
-
-        val parser = EmvTemplate.Builder().setProvider(provider).setConfig(config).build()
-
-        val card = parser.readEmvCard()
-
-        var number: String? = null
-        var expire: String? = null
-        var holder: String? = null
-        var type: String? = null
-        var status: String? = null
-
-        val fmt = SimpleDateFormat("MM/YY")
-
-        if (card.track1 != null) {
-            number = card.track1.cardNumber
-            expire = fmt.format(card.track1.expireDate)
-        } else if (card.track2 != null) {
-            number = card.track2.cardNumber
-            expire = fmt.format(card.track2.expireDate)
-        }
-
-        if (card.holderFirstname != null && card.holderLastname != null) {
-            holder = card.holderFirstname + " " + card.holderLastname
-        }
-
-        if (card.type != null) {
-            type = card.type.name
-        }
-
-        if (card.state == CardStateEnum.UNKNOWN) {
-            status = "unknown"
-        } else if (card.state == CardStateEnum.LOCKED) {
-            status = "locked"
-        } else if (card.state == CardStateEnum.ACTIVE) {
-            status = "active"
-        }
-
-        val res = HashMap<String, String?>()
-        res.put("type", type)
-        res.put("number", number)
-        res.put("expire", expire)
-        res.put("holder", holder)
-        res.put("status", status)
-
-        handler.post{ result.success(res) }
-
-        unregister()
     }
 }

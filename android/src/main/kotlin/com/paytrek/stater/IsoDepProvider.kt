@@ -8,21 +8,9 @@ import java.io.IOException
 
 class IsoDepProvider(val tag: IsoDep): IProvider {
     override fun transceive(command: ByteArray): ByteArray {
-        try {
-            return tag.transceive(command)
-        } catch(e: TagLostException) {
-            Log.d("ERROR", "Tag was lost")
-            
-            return byteArrayOf()
-        } catch(e: SecurityException) {
-            Log.d("ERROR", "Tag is out of date - card was removed before transaction completed")
-            
-            return byteArrayOf()
-        } catch(e: IOException) {
-            e.printStackTrace()
-
-            return byteArrayOf()
-        }
+        // We do not catch exceptions here anymore. We let them propagate to NfcScanner/NfcReader
+        // so that the entire card reading process (connection + select + read) can be retried.
+        return tag.transceive(command)
     }
 
     override fun getAt(): ByteArray {
