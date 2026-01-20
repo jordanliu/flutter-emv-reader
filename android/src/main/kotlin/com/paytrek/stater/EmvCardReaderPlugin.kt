@@ -24,6 +24,7 @@ class EmvCardReaderPlugin: FlutterPlugin, ActivityAware, MethodCallHandler, Even
   private var activity : Activity? = null
 
   private var adapter : NfcAdapter? = null
+  private var scanner: NfcScanner? = null
 
   private lateinit var mc : MethodChannel
 
@@ -34,17 +35,22 @@ class EmvCardReaderPlugin: FlutterPlugin, ActivityAware, MethodCallHandler, Even
   }
 
   private fun start() {
-    if (adapter == null) return
+    if (adapter == null || activity == null) return
 
     val f = FLAG_READER_NFC_A or FLAG_READER_NFC_B or FLAG_READER_NFC_F or FLAG_READER_NFC_V
 
-    listeners.add(NfcScanner(this))
+    // Ensure a single scanner instance to avoid concurrent reads
+    if (scanner == null) {
+      scanner = NfcScanner(this)
+    }
+    listeners.removeIf { it is NfcScanner }
+    listeners.add(scanner)
 
     adapter!!.enableReaderMode(activity, this, f, null)
   }
 
   private fun stop() {
-    if (adapter == null) return
+    if (adapter == null || activity == null) return
 
     adapter!!.disableReaderMode(activity)
 
@@ -61,7 +67,6 @@ class EmvCardReaderPlugin: FlutterPlugin, ActivityAware, MethodCallHandler, Even
 
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
     require(activity != null) { "Plugin not ready yet" }
-
     if (call.method == "available") {
       if (adapter != null && adapter!!.isEnabled()) {
         result.success(true)

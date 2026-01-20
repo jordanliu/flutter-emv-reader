@@ -99,6 +99,10 @@ class NfcReader(result: MethodChannel.Result, call: MethodCall) : AbstractNfcHan
                 break
 
             } catch (e: Exception) {
+               // Treat SecurityException "Tag ... is out of date" like a lost tag
+               if (e is SecurityException) {
+                   break
+               }
                // If tag is lost, break to allow rediscovery.
                if (e is android.nfc.TagLostException || e.cause is android.nfc.TagLostException) {
                    break
