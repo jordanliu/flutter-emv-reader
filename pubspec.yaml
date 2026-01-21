@@ -1,6 +1,6 @@
 name: emv_card_reader
 description: NFC reader for payment related EMV card family
-version: 0.0.1
+version: 2.0.0
 homepage:
 
 environment:
